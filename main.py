@@ -16,7 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-#Gerekli Kütüphaneler
+#Gerekli Kütühaneler
 import discord
 from discord.ext import commands
 from cryptography.fernet import Fernet
@@ -27,7 +27,7 @@ import time
 
 #Bakiye manipülasyonu için şifreleme.
 #Buraya, manipülasyonu yapacak kişinin Discord ID'si girilmeli.
-admin = "MANIPULASYONU-YAPACAK-KISININ-IDSI"
+admin = "MANPILUASYONU-YAPACAK-KISININ-IDSI"
 gen_key = Fernet.generate_key()
 fernet = Fernet(gen_key)
 sifreli_id = fernet.encrypt(str(admin).encode())
@@ -118,7 +118,7 @@ async def clean_messages(ctx, adet: str):
     #Adet parametresini string alıyoruz çünkü kullanıcı "all" gireiblir.
     #Bu durumda sunucudaki olası tüm mesajları sildireceğiz. (Adet 2000 olarak belirli.)
     #Hareketli onay emoji komutu: <a:onay:1053352128392994846>
-    await ctx.channel.purge(limit=(2000) if adet=="all" else int(adet))
+    await ctx.channel.purge(limit=(2000) if adet=="all" else int(adet)+1)
     if(adet=="all"):
         await ctx.send(f'Mevcut kanaldaki **tüm** mesajlar temizlendi. <a:onay:1053352128392994846>')
     else:
@@ -159,16 +159,16 @@ async def change_balance(ctx, u: discord.Member, a: int):
 
     #Eğer sizseniz, bakiyeyi manipüle edebileceksiniz.
     #Kullanıcı kayıtlı değilse, kayıt et ve bakiyeyi manipüle et.
-    selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(u.id)))
+    selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(u.id),))
     if(selector.fetchone() is None):
-        selector.execute('''INSERT INTO users (id,cash) VALUES (?, 0)''',(str(u.id)))
+        selector.execute('''INSERT INTO users (id,cash) VALUES (?, 0)''',(str(u.id),))
         db.commit()
 
     #Kullanıcı kayıt edildi, bakiyeyi düzenle ve bildiri mesajı ver.
     selector.execute('''UPDATE users SET cash = cash + ? WHERE id = ?''',(a,str(u.id)))
     db.commit()
 
-    selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(u.id)))
+    selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(u.id),))
     data = selector.fetchone()
     await ctx.send(f'{u.mention} kullanıcısının bakiyesi **{data[0]}** 💵 olarak güncellendi.')
 
