@@ -16,7 +16,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
-#Gerekli Kütühaneler
+#Gerekli Kütüphaneler
 import discord
 from discord.ext import commands
 from cryptography.fernet import Fernet
@@ -27,7 +27,7 @@ import time
 
 #Bakiye manipülasyonu için şifreleme.
 #Buraya, manipülasyonu yapacak kişinin Discord ID'si girilmeli.
-admin = "MANPILUASYONU-YAPACAK-KISININ-IDSI"
+admin = "ADMIN-ID"
 gen_key = Fernet.generate_key()
 fernet = Fernet(gen_key)
 sifreli_id = fernet.encrypt(str(admin).encode())
@@ -82,13 +82,40 @@ async def on_member_join(newbie):
     #Bir mesaj gönderelim.
     await newbie.guild.system_channel.send(f'Katıldığın için teşekkürler sensei {newbie.mention}!')
 
+#Eğer harici komut girilirse botu tetiklemeyi önle.
+@client.event
+async def on_command_error(ctx, hata):
+    if(isinstance(hata,commands.CommandNotFound)): return
+
 #---------------------------------------------------------------------------#
 #Aşağıda context kullanarak her bir komut için ayrı ayrı işlevler yazacağız.
 #---------------------------------------------------------------------------#
 
+#0. Bakiye Sıfırlama
+#Bu komut, mevcut kullanıcının bakiyesini sıfırlar.
+#Komut kullanımı: <prefix><r> <@user>
+@client.command(name="r",hidden=True)
+async def reset_balance(ctx, u: discord.Member):
+
+    #İlgili datayı getiriyoruz.
+    selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(ctx.author.id),))
+    data = selector.fetchone()
+
+    #Eğer kullanıcı ilk defa bu komutu kullandıysa, verisi olmayacak. Data değeri Null dönecek.
+    #Bu durumda kullanıcıya bir kayıt oluşturulacak ve +5000 bakiye yüklenecek.
+    if(data is None):
+        selector.execute('''INSERT INTO users (id,cash) VALUES (?, 0)''',(str(u.id),))
+        db.commit()
+        await ctx.send(f'**{u.mention}** kullanıcısının bakiyesi sıfırlandı. <a:onay:1053352128392994846>')
+    else:
+        selector.execute('''UPDATE users SET cash = 0 WHERE id = ?''',(str(u.id),))
+        db.commit()
+        await ctx.send(f'**{u.mention}** kullanıcısının bakiyesi sıfırlandı. <a:onay:1053352128392994846>')
+
 #1. Botun kendisini sunucudan şutlaması
 #Bu komutu kullandığınızda bot kendisini mevcut sunucudan çıkaracaktır.
-@client.command(name="kick")
+#Komut kullanımı: <prefix><kick>
+@client.command(name="kick",hidden=True)
 async def sunucudan_ayril(ctx):
 
     #Sunucuyu bilgilendir ve ayrıl.
@@ -97,7 +124,8 @@ async def sunucudan_ayril(ctx):
 
 #2. Gecikme hesabı
 #Bu komut kullanıldığında, bot sunucuyla arasındaki gecikmeyi bastıracaktır.
-@client.command(name="ping")
+#Komut kullanımı: <prefix><ping>
+@client.command(name="ping",brief="Bu komut sayesinde gecikme değerini ölçebilirsiniz. nping yazmanız yeterlidir.")
 async def calculate_latency(ctx):
 
     #Bot kullanıcının mesajına bir emoji ekleyecek ve arada geçen süreyi hesaplayacak.
@@ -111,7 +139,7 @@ async def calculate_latency(ctx):
 #Bu komut, belirtilen içerik sayısı kadar mesaj silecektir.
 #Bunun için ayrıca mesajları yönetme yetkisinin de olması gerekmekte.
 #Komut kullanımı: <prefix><t> <value>
-@client.command(name="t")
+@client.command(name="t",brief="Bu komut sayesinde mevcut kanaldaki mesajları silebilirsiniz. nt <silinecek_mesaj_adeti> yazmanız yeterlidir.")
 @commands.has_permissions(manage_messages=True)
 async def clean_messages(ctx, adet: str):
 
@@ -122,13 +150,13 @@ async def clean_messages(ctx, adet: str):
     if(adet=="all"):
         await ctx.send(f'Mevcut kanaldaki **tüm** mesajlar temizlendi. <a:onay:1053352128392994846>')
     else:
-        await ctx.send(f'Mevcut kanaldaki **{int(adet)}** adet mesaj temizlendi. <a:onay:1053352128392994846>')
+        await ctx.send(f'Mevcut kanaldaki **{int(adet):,}** adet mesaj temizlendi. <a:onay:1053352128392994846>')
 
 #4. Bakiye kontrolü
 #Bu komut, kullanıcılara bakiyelerini döndürür. Veritabanından doğrulama yaparak.
 #İlk kayıt olacaklar için +5000 bakiye verecek. Kaydı varsa, mevcut bakiyesini döndürecek.
 #Komut kullanımı: <prefix><b>
-@client.command(name="b")
+@client.command(name="b",brief="Bu komut sayesinde bakiyenizi öğrenebilirsiniz. nb yazmanız yeterlidir.")
 async def check_balance(ctx):
 
     #İlgili datayı getiriyoruz.
@@ -145,12 +173,12 @@ async def check_balance(ctx):
         bakiye = data[0]
 
     #Bakiyeyi yazdırıyoruz.
-    await ctx.send(f'Güncel bakiyeniz: **{bakiye}** 💵')
+    await ctx.send(f'Güncel bakiyeniz: **{bakiye:,}** 💵')
 
 #5. Bakiye Manipülasyonu
 #Bu komutu kullanacak kişinin ID'si, yukarıda tanımlanmalıdır. Aksi halde çalışmayacak.
 #Komut kullanımı: <prefix><sb> <@user> <value>
-@client.command(name="sb")
+@client.command(name="sb",hidden=True)
 async def change_balance(ctx, u: discord.Member, a: int):
 
     #Eğer bu mesajı yazan siz değilseniz, çalışmayacak.
@@ -167,15 +195,17 @@ async def change_balance(ctx, u: discord.Member, a: int):
     #Kullanıcı kayıt edildi, bakiyeyi düzenle ve bildiri mesajı ver.
     selector.execute('''UPDATE users SET cash = cash + ? WHERE id = ?''',(a,str(u.id)))
     db.commit()
-
     selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(u.id),))
     data = selector.fetchone()
-    await ctx.send(f'{u.mention} kullanıcısının bakiyesi **{data[0]}** 💵 olarak güncellendi.')
+    await ctx.send(f'{u.mention} kullanıcısının bakiyesi **{data[0]:,}** 💵 olarak güncellendi.')
+
+    #Mesaj bildirimlerini sil.
+    await ctx.channel.purge(limit=2)
 
 #6. Yazıtura Implementasyonu
 #Bu komut, botun yazıtura oynamasına olanak sağlar.
 #Komut kullanımı: <prefix><cf> <h/t> <value>
-@client.command(name="cf")
+@client.command(name="cf",brief="Bu komut sayesinde yazıtura oynayabilirsiniz. ncf <h/t> <bahis> yazmanız yeterlidir.")
 async def pick_coinflip(ctx, att: str, a: str):
 
     #Manipülasyondan farkı, kullanıcı ilk defa kullanıp oyunlar oynamak isteyebilir.
@@ -192,7 +222,7 @@ async def pick_coinflip(ctx, att: str, a: str):
     #Şimdi bahis miktarıyla bakiyesini kontrol edeceğiz. Yeterli bakiyesi yoksa oynayamaz.
     tmp = bakiye if(a=="all") else int(a)
     if(tmp>bakiye or bakiye==0):
-        await ctx.send(f'Bakiyeniz yetersiz. Bu bahsi yapabilmeniz için **{tmp-bakiye}** 💵 daha ihtiyacınız var.')
+        await ctx.send(f'Bakiyeniz yetersiz. Bu bahsi yapabilmeniz için **{tmp-bakiye:,}** 💵 daha ihtiyacınız var.')
         return
 
     #Bahis, bakiyeden az veya bakiyeye eşitse, oyuna devam et.
@@ -210,18 +240,18 @@ async def pick_coinflip(ctx, att: str, a: str):
         selector.execute('''UPDATE users SET cash = cash + ? WHERE id = ?''',(tmp,str(ctx.author.id)))
         selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(ctx.author.id),))
         data = selector.fetchone()
-        await inform.edit(content=f'Kazandın. Güncel bakiyen **{data[0]}** 💵')
+        await inform.edit(content=f'Kazandın. Güncel bakiyen **{data[0]:,}** 💵')
     #Kaybettiyse;
     else:
         selector.execute('''UPDATE users SET cash = cash - ? WHERE id = ?''',(tmp,str(ctx.author.id)))
         selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(ctx.author.id),))
         data = selector.fetchone()
-        await inform.edit(content=f'Kaybettin. Güncel bakiyen **{data[0]}** 💵') 
+        await inform.edit(content=f'Kaybettin. Güncel bakiyen **{data[0]:,}** 💵') 
 
 #7. Slot Oyunu Implementasyonu
 #Bu komut, botun slot oynatmasına olanak sağlar.
 #Komut kullanımı: <prefix><s> <value>
-@client.command(name="s")
+@client.command(name="s",brief="Bu komut sayesinde slot oynayabilirsiniz. ns <bahis> yazmanız yeterlidir.")
 async def pick_slot(ctx, a: str):
 
     #Manipülasyondan farkı, kullanıcı ilk defa kullanıp oyunlar oynamak isteyebilir.
@@ -238,7 +268,7 @@ async def pick_slot(ctx, a: str):
     #Şimdi bahis miktarıyla bakiyesini kontrol edeceğiz. Yeterli bakiyesi yoksa oynayamaz.
     tmp = bakiye if(a=="all") else int(a)
     if(tmp>bakiye or bakiye==0):
-        await ctx.send(f'Bakiyeniz yetersiz. Bu bahsi yapabilmeniz için **{tmp-bakiye}** 💵 daha ihtiyacınız var.')
+        await ctx.send(f'Bakiyeniz yetersiz. Bu bahsi yapabilmeniz için **{tmp-bakiye}:,** 💵 daha ihtiyacınız var.')
         return
 
     #Slot oyunu
@@ -257,9 +287,10 @@ async def pick_slot(ctx, a: str):
     selector.execute('''UPDATE users SET cash = cash + ? WHERE id = ?''',(tutar,str(ctx.author.id)))
     selector.execute('''SELECT cash FROM users WHERE id = ?''',(str(ctx.author.id),))
     data = selector.fetchone()
-    if(tutar>0): await ctx.send(f'**{tutar}** 💵 kazandınız! Yeni bakiyeniz: **{data[0]}** 💵')
-    else: await ctx.send(f'**{tutar}** 💵 kaybettiniz! :( Yeni bakiyeniz: **{data[0]}** 💵')
+    if(tutar>0): await ctx.send(f'**{tutar:,}** 💵 kazandınız! Yeni bakiyeniz: **{data[0]:,}** 💵')
+    else: await ctx.send(f'**{tutar:,}** 💵 kaybettiniz! :( Yeni bakiyeniz: **{data[0]:,}** 💵')
 
 #Tüm metotlar tamamlandı. Artık botu çalıştırabiliriz.
 #Bunun için botunuzun tokeni gerekmekte.
-client.run("BOT-TOKENINIZI-BURAYA-YAPISTIRIN")
+client.run("BOT-TOKENI")
+
